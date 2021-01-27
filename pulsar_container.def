@@ -1,0 +1,179 @@
+Bootstrap: library
+From: ubuntu:16.04
+
+%environment
+# Export environment variables here.
+PSR64=/usr/local/pulsar64
+PYTHONBASE=/usr
+PYTHONVER=2.7
+export GUPPI_DIR=$PSR64/src/guppi_daq
+export PSRCAT_FILE=$PSR64/share/psrcat.db
+export PGPLOT_DIR=/usr/local/pulsar64/src/pgplot
+export PRESTO=$PSR64/src/presto
+export TEMPO=$PSR64/src/tempo
+export TEMPO2=$PSR64/src/tempo2
+export PSRCHIVE=$PSR64/src/psrchive
+export BLDSPSR=$PSR64/src/bl-dspsr
+export PATH=$PSR64/bin:$PRESTO/bin:$PYTHONBASE/bin:$PATH:$PSR64/share/tempo2/bin
+export PYTHONPATH=$PSR64/lib/python$PYTHONVER/site-packages:$PRESTO/lib/python:$PYTHONBASE/lib/python$PYTHONVER:$PYTHONBASE/lib/python$PYTHONVER/site-packages
+export LD_LIBRARY_PATH=$PSR64/lib:$PRESTO/lib:$TEMPO2/lib:$PYTHONBASE/lib:/usr/lib/x86_64-linux-gnu:$PRESTO/lib
+export LIBRARY_PATH=$PSR64/lib:$PRESTO/lib:$TEMPO2/lib:$PYTHONBASE/lib:/usr/lib/x86_64-linux-gnu
+export CPATH=/usr/local/include:/usr/include:$GUPPI_DIR/src
+
+%post
+# Export environment variables here.
+PSR64=/usr/local/pulsar64
+PYTHONBASE=/usr
+PYTHONVER=2.7
+export GUPPI_DIR=$PSR64/src/guppi_daq
+export PSRCAT_FILE=$PSR64/share/psrcat.db
+export PGPLOT_DIR=/usr/local/pulsar64/src/pgplot
+export PRESTO=$PSR64/src/presto
+export TEMPO=$PSR64/src/tempo
+export TEMPO2=$PSR64/src/tempo2
+export PSRCHIVE=$PSR64/src/psrchive
+export BLDSPSR=$PSR64/src/bl-dspsr
+export PATH=$PSR64/bin:$PRESTO/bin:$PYTHONBASE/bin:$PATH:$PSR64/share/tempo2/bin
+export PYTHONPATH=$PSR64/lib/python$PYTHONVER/site-packages:$PRESTO/lib/python:$PYTHONBASE/lib/python$PYTHONVER:$PYTHONBASE/lib/python$PYTHONVER/site-packages
+export LD_LIBRARY_PATH=$PSR64/lib:$PRESTO/lib:$TEMPO2/lib:$PYTHONBASE/lib:/usr/lib/x86_64-linux-gnu
+export LIBRARY_PATH=$PSR64/lib:$PRESTO/lib:$TEMPO2/lib:$PYTHONBASE/lib:/usr/lib/x86_64-linux-gnu
+export CPATH=/usr/local/include:/usr/include:$GUPPI_DIR/src
+
+apt update
+apt -y install git
+apt -y install autoconf
+apt -y install libtool
+apt -y install gcc
+apt -y install g++
+apt -y install gfortran
+apt -y install pgplot5
+apt -y install zlib1g-dev
+apt -y install make
+apt -y install tcsh
+apt -y install fftw3-dev
+apt -y install libcfitsio-dev
+apt -y install libgsl-dev
+apt -y install wget
+apt -y install apt-utils
+apt -y install pkg-config
+apt -y install libx11-dev
+apt -y install libpng16-dev
+apt -y install libglib2.0-dev
+apt -y install latex2html # this is ridiculous - adds 1GB for "pstoimg" command
+apt -y install cmake socket vim libreadline-dev curl libxml2-dev swig libomp-dev
+apt -y install python
+apt -y install python-pip
+# note: need to upgrade pip but due to python2.7 support disappearing pip 21.0 stopped working
+pip install --upgrade "pip < 21.0"
+pip install numpy pandas cython astropy
+
+### this takes too long!!! do we need it?
+# make fftw wisdom? 
+# mkdir /etc/fftw
+# fftw-wisdom -v -c -o /etc/fftw/wisdom
+
+### bl_sigproc
+cd /usr/local
+git clone https://github.com/UCBerkeleySETI/bl_sigproc.git
+cd bl_sigproc
+./bootstrap
+./configure
+make -j8
+make install
+
+### set up pulsar64 - download everything first into $PSR64/src
+mkdir -p $PSR64/src
+cd $PSR64/src
+# tempo
+git clone git://git.code.sf.net/p/tempo/tempo
+# tempo2
+git clone https://bitbucket.org/psrsoft/tempo2.git
+# presto - get bl version
+git clone https://github.com/UCBerkeleySETI/presto.git
+# dspsr - get bl-dspsr version
+git clone https://github.com/UCBerkeleySETI/bl-dspsr.git
+# psrcat
+wget https://www.atnf.csiro.au/research/pulsar/psrcat/downloads/psrcat_pkg.tar.gz
+tar xvfz psrcat_pkg.tar.gz
+rm psrcat_pkg.tar.gz
+# psrchive
+git clone git://git.code.sf.net/p/psrchive/code psrchive
+# guppi_daq
+git clone https://github.com/UCBerkeleySETI/guppi_daq.git
+
+### psrcat install
+cd $PSR64/src/psrcat_tar
+mkdir $PSR64/share
+mkdir $PSR64/bin
+cp ./*.db $PSR64/share/.
+./makeit
+cp psrcat $PSR64/bin/.
+
+### guppi_daq
+cd $PSR64/src/guppi_daq
+python setup.py install --install-lib=$PSR64/src/guppi_daq
+
+### tempo
+cd $TEMPO
+./prepare
+./configure --prefix=$PSR64
+make -j8
+make install
+
+### tempo2
+cd $TEMPO2
+./bootstrap
+./configure --prefix=$PSR64
+make -j8
+make install
+make plugins
+make plugins-install
+ln -s $PSR64/include
+ln -s $PSR64/lib
+
+### presto
+cd $PRESTO/src
+# hack: there is some chicken/egg silliness - you have to build libsla.so by hand
+# and copy it to a standard location before running the full make
+cd slalib
+gfortran -g -fPIC -fno-second-underscore -c -I. *.f *.F
+gfortran -shared -o $PRESTO/lib/libsla.so -fno-second-underscore *.o
+cp $PRESTO/lib/libsla.so /usr/lib/.
+# anyway... going back to the beginning
+cd $PRESTO/src
+make makewisdom
+make -j8
+# now all the python stuff
+cd $PRESTO
+pip install .
+python setup.py install
+
+#### psrchive
+# hack: need to add stdint.h include to get this to compile
+cd $PSRCHIVE/Base/Formats/PSRFITS
+sed '1 i\#include "stdint.h"' ProfileColumn.C > ProfileColumn.C.fixed
+mv -vf ProfileColumn.C.fixed ProfileColumn.C
+# okay that was stupid - now onto the normal stuff
+cd $PSRCHIVE
+./bootstrap
+./configure --prefix=$PSR64 --with-psrcat=psrcat --enable-shared
+make clean
+make -j8
+make install
+
+#### dspsr
+echo "apsr asp bcpm bpsr caspsr cpsr cpsr2 dummy fits kat lbadr lbadr64 lump lwa mwa pdev s2 sigproc ska1" > $BLDSPSR/backends.list
+export PATH=$PSR64/bin:$PATH
+cd $BLDSPSR
+./bootstrap
+./configure --prefix=$PSR64 GUPPI_DIR=
+# add the guppi back in after the configure... since we do not care about guppi_daq shared memory buffer stuff which breaks the current build
+echo "apsr asp bcpm bpsr caspsr cpsr cpsr2 dummy fits guppi kat lbadr lbadr64 lump lwa mwa pdev s2 sigproc ska1" > $BLDSPSR/backends.list
+make -j8
+make install
+
+%runscript
+# Enable passing arguments into container via commandline
+echo "Container Created"
+echo "Args: $*"
+exec "$@"
