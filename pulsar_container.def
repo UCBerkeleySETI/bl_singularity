@@ -67,6 +67,11 @@ apt -y install python-pip
 pip install --upgrade "pip < 21.0"
 pip install numpy pandas cython astropy
 
+# locale stuff (to avoid annoying warnings)
+apt -y install locales
+locale-gen en_US.UTF-8
+update-locale
+
 ### this takes too long!!! do we need it?
 # make fftw wisdom? 
 # mkdir /etc/fftw
