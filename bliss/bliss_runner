@@ -1,0 +1,24 @@
+#!/bin/bash
+
+SINGULARITY=${SINGULARITY:-singularity}
+
+BLISSPROG=`basename $0`
+if [ "${BLISSPROG}" == "bliss_runner" ]
+then
+    echo "Running shell in bliss container..."
+    CONTAINER_COMMAND=shell
+    BLISSPROG=""
+else
+    CONTAINER_COMMAND=exec
+fi
+
+BLISSSIF="$(dirname ${BASH_SOURCE[0]})/bliss.sif"
+
+BINDOPTS="-B ${CUDA_DIR:-/usr/local/cuda}:/usr/local/cuda"
+
+for d in ${BLISS_DATADIRS:-/data* /buf* /scratch* /mnt /gluster}
+do
+    test -d "$d" && BINDOPTS="${BINDOPTS} -B \"$d\""
+done
+
+exec ${SINGULARITY} ${CONTAINER_COMMAND} --nv ${BINDOPTS} "${BLISSSIF}" "${BLISSPROG}" "$@"

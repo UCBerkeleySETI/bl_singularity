@@ -1,0 +1,79 @@
+Bootstrap: docker
+From: ubuntu:24.04
+
+%help
+   This container contains an Ubuntu 24.04 based build of bliss.  To use CUDA,
+   you must pass the `--nv -B /usr/local/cuda` options on the
+   singularity/apptainer command line.
+
+%setup
+    # Create directories for bind mounts of common data directories
+    mkdir ${SINGULARITY_ROOTFS}/datax
+    mkdir ${SINGULARITY_ROOTFS}/datax2
+    mkdir ${SINGULARITY_ROOTFS}/datax3
+    mkdir ${SINGULARITY_ROOTFS}/datag
+    mkdir -p ${SINGULARITY_ROOTFS}/usr/local/cuda
+
+%post -c /bin/bash
+    # Install packages
+    apt-get update && \
+    apt-get install -y --no-install-recommends software-properties-common && \
+    add-apt-repository -y universe && \
+    apt-get install -y --no-install-recommends \
+				libhdf5-dev \
+				libfftw3-dev \
+        bitshuffle \
+				g++-11 \
+        build-essential \
+        cmake \
+        git \
+        pkgconf \
+        python3-build \
+        python3-dev \
+        python3-pip \
+        python3-venv
+
+    # Setup CUDA
+    export CUDA_DIR=/usr/local/cuda
+    export PATH=${CUDA_DIR}/bin:$PATH
+    export LD_LIBRARY_PATH=${CUDA_DIR}/lib64:$LD_LIBRARY_PATH
+    export NVCC_PREPEND_FLAGS='-ccbin /usr/bin/g++-11'
+
+    # Clone bliss
+    cd /usr/local/src
+    git clone https://github.com/n-west/bliss.git
+    cd bliss
+    # bliss git commit 17625d9 was the HEAD of the main branch when this file
+    # was created.  TODO: Switch to a tag once a tagged release is avilable.
+    git checkout 17625d9
+
+    # Build bliss (cmake)
+    mkdir build
+    cd build
+    cmake ..
+    make -j $(($(nproc)/2)) && make install
+    # Remove build area
+    cd ..
+    rm -rf build
+
+    ## Build bliss (python build)
+    #python3 -m build --wheel
+    #python3 -m pip install --break-system-packages dist/*.whl
+    ## Remove build area
+    #rm -rf build-wheel dist
+
+    # Remove packages that were only needed for building
+    apt-get remove -y --purge --auto-remove \
+        build-essential \
+        cmake \
+        git \
+        pkgconf \
+        python3-build \
+        python3-dev \
+        python3-pip \
+        python3-venv
+
+%environment
+    export CUDA_DIR=/usr/local/cuda
+    export PATH=${CUDA_DIR}/bin:$PATH
+    export LD_LIBRARY_PATH=${CUDA_DIR}/lib64:$LD_LIBRARY_PATH
